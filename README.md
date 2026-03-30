@@ -96,7 +96,7 @@ It uses the [WebSocket client library for Python version 0.40.0](https://pypi.or
 
 It includes [six.py version 1.17.0](https://pypi.org/project/six/), licensed under the MIT License.
 
-It includes the json module, hmac.py and ssl.py, which are part of the [Python 2.7 Standard Library](https://github.com/python/cpython/tree/2.7), licensed under the [Python License](LICENSE.python.txt).
+It includes the json module and hmac.py, which are part of the [Python 2.7 Standard Library](https://github.com/python/cpython/tree/2.7), licensed under the [Python License](LICENSE.python.txt).
 
 All other code and content in this repository is licensed under the [MIT License](LICENSE).
 

@@ -15,29 +15,19 @@ init python:
     
     _neuro_game_started = False
 
-    # We need hmac.py and ssl.py for websocket-client to work in older Ren'Py versions, such as the one used in DDLC.
-    # However, these break under newer Ren'Py versions, so we need to remove them in that case.
-    import sys
-    import os
-    game_dir = os.path.join(config.basedir, "game")
-    import_error = False
     try:
-        import websocket
+        __import__("hmac")
     except:
-        import_error = True
-    if import_error:
-        hmac_path = os.path.join(game_dir, "hmac.py")
-        ssl_path = os.path.join(game_dir, "ssl.py")
-        deleted = False
-        if os.path.exists(hmac_path):
-            os.remove(hmac_path)
-            deleted = True
-        if os.path.exists(ssl_path):
-            os.remove(ssl_path)
-            deleted = True
-        if deleted:
-            renpy.log("[NEURO] Removed hmac.py and/or ssl.py to ensure compatibility with newer Ren'Py versions, restarting the game...")
-            renpy.quit(relaunch=True)     
+        renpy.log("[NEURO] Module hmac not found, trying to import from py2...")
+        from py2 import hmac as hmac2
+        sys.modules["hmac"] = hmac2
+
+    try:
+        __import__("ssl")
+    except:
+        renpy.log("[NEURO] Module ssl not found, trying to import from py2...")
+        from py2 import ssl as ssl2
+        sys.modules["ssl"] = ssl2
 
     import websocket
     import json
@@ -429,16 +419,19 @@ init python:
 
     def _neuro_ws_run():
         global _neuro_ws
-        while True:
-            _neuro_ws = websocket.WebSocketApp(
-                neuroconfig.ws_url,
-                on_open=_neuro_ws_on_open,
-                on_message=_neuro_ws_on_message,
-                on_error=_neuro_ws_on_error,
-                on_close=_neuro_ws_on_close
-            )
-            _neuro_ws.run_forever()
-            time.sleep(1) # Wait before trying to reconnect
+        try:
+            while True:
+                _neuro_ws = websocket.WebSocketApp(
+                    neuroconfig.ws_url,
+                    on_open=_neuro_ws_on_open,
+                    on_message=_neuro_ws_on_message,
+                    on_error=_neuro_ws_on_error,
+                    on_close=_neuro_ws_on_close
+                )
+                _neuro_ws.run_forever()
+                time.sleep(1) # Wait before trying to reconnect
+        except Exception as e:
+            renpy.log("[NEURO] Exception in WebSocket thread: {}".format(str(e)))
     renpy.invoke_in_thread(_neuro_ws_run)
 
 
@@ -629,7 +622,7 @@ init python:
                 renpy.exports.queue_event,
                 "dismiss",
             )
-            # In case the first one didn't go through... (actually heppened during testing, idk why)
+            # In case the first one didn't go through... (actually happened during testing, idk why)
             _neuro_delayed_function(
                 neuroconfig.max_progression_time + 5.0,
                 renpy.exports.queue_event,
