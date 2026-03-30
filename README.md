@@ -98,6 +98,10 @@ It includes [six.py version 1.17.0](https://pypi.org/project/six/), licensed und
 
 It includes the json module and hmac.py, which are part of the [Python 2.7 Standard Library](https://github.com/python/cpython/tree/2.7), licensed under the [Python License](LICENSE.python.txt).
 
+For compiling, this repository includes [Ren'Py version 6.99.12.4.2187](https://www.renpy.org/release/6.99.12), licensed under the [MIT License](tools/renpy/LICENSE.txt).
+
+For archiving, this repository includes [rpatool.py](https://codeberg.org/shiz/rpatool), licensed under the [WTFPL](https://codeberg.org/shiz/rpatool/src/branch/master/LICENSE).
+
 All other code and content in this repository is licensed under the [MIT License](LICENSE).
 
 ## Thanks
