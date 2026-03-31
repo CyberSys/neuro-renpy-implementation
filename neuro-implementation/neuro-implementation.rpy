@@ -13,7 +13,8 @@ init python:
 
     renpy.log("[NEURO] Initializing Neuro Implementation...")
     
-    _neuro_game_started = False
+    persistent._neuro_game_started = False
+    persistent._neuro_shutdown_requested = False
 
     try:
         __import__("hmac")
@@ -108,14 +109,43 @@ init python:
         else:
             return str(who)
 
+    def _neuro_leave_game(force=False):
+        persistent._neuro_shutdown_requested = True
+        if not _can_save() and not force:
+            return
+        renpy.log("[NEURO] Leaving the game and returning to the main menu...")
+        neuro_give_context("Leaving the game and returning to the main menu.")
+        _neuro_cancel_delayed_functions()
+        neuro_unregister_all_actions()
+        _neuro_save()
+        _neuro_delayed_function(
+            0.1,
+            renpy.full_restart
+        )
+        msg = {
+            "command": "shutdown/ready",
+            "game": _neuro_get_game_name(),
+        }
+        _neuro_send_ws_message(json.dumps(msg))
 
     ### SAVING / LOADING ###
+
+    def _can_save():
+        if main_menu:
+            return False
+        try:
+            return config.save and (renpy.context_nesting_level() == 0)
+        except:
+            # Older Ren'Py versions don't have config.save or renpy.context_nesting_level, so just assume we can save
+            return True
 
     def _neuro_save():
         if not neuroconfig.save_game:
             return
-        if not _neuro_game_started:
+        if not persistent._neuro_game_started:
             renpy.log("[NEURO] Game has not started yet, skipping save.")
+            return
+        if not _can_save():
             return
         renpy.log("[NEURO] Saving the game...")
         try:
@@ -410,7 +440,13 @@ init python:
                 }
             }
             _neuro_send_ws_message(json.dumps(msg), ws)
-
+        elif data.get("command") == "shutdown/graceful":
+            # Go to the main menu when dialogue is done
+            renpy.log("[NEURO] Received shutdown command, will leave the game at the next opportunity.")
+            persistent._neuro_shutdown_requested = data.get("data", {}).get("wants_shutdown", True)
+        elif data.get("command") == "shutdown/immediate":
+            # Immediately go to the main menu
+            _neuro_leave_game(True)
     def _neuro_ws_on_error(ws, error):
         renpy.log("[NEURO] Error occurred:", error)
 
@@ -539,38 +575,38 @@ init python:
 
     # Register the label callback
     def _neuro_on_label(name, jumped):
-        global _neuro_game_started
         # Hide all delayed function screens when a label is jumped to
         # This is to ensure that the delayed function screen does not keep on running on menus
         _neuro_cancel_delayed_functions()
         if "main_menu" in name:
-            if _neuro_game_started:
-                # Game has just ended, start a new game or close the game window depending on the game_over_action config
-                if neuroconfig.game_over_action == "new_game":
-                    neuro_give_context("The game is over. Starting a new game.", silent=True)
-                    _neuro_delayed_function(
-                        5.0,
-                        _neuro_load,
-                        True
-                    )
-                elif neuroconfig.game_over_action == "close":
-                    neuro_give_context("The game is over. Closing the game window.", silent=True)
-                    _neuro_delayed_function(
-                        5.0,
-                        renpy.quit
-                    )
-            else:
-                # Auto-start the game if the main menu is loaded and auto_start is enabled
-                if neuroconfig.auto_start:
-                    _neuro_delayed_function(
-                        5.0,
-                        _neuro_load
-                    )
-            _neuro_game_started = False
+            if not persistent._neuro_shutdown_requested:
+                if persistent._neuro_game_started:
+                    # Game has just ended, start a new game or close the game window depending on the game_over_action config
+                    if neuroconfig.game_over_action == "new_game":
+                        neuro_give_context("The game is over. Starting a new game.", silent=True)
+                        _neuro_delayed_function(
+                            5.0,
+                            _neuro_load,
+                            True
+                        )
+                    elif neuroconfig.game_over_action == "close":
+                        neuro_give_context("The game is over. Closing the game window.", silent=True)
+                        _neuro_delayed_function(
+                            5.0,
+                            renpy.quit
+                        )
+                else:
+                    # Auto-start the game if the main menu is loaded and auto_start is enabled
+                    if neuroconfig.auto_start:
+                        _neuro_delayed_function(
+                            5.0,
+                            _neuro_load
+                        )
+            persistent._neuro_game_started = False
             
         # Set the game started flag if the label is "start"
         if name == "start":
-            _neuro_game_started = True
+            persistent._neuro_game_started = True
     try:
         config.label_callbacks.append(_neuro_on_label)
     except:
@@ -581,6 +617,11 @@ init python:
                 old_label_callback(name, jumped)
             _neuro_on_label(name, jumped)
         config.label_callback = new_label_callback
+
+    # Register the after load callback
+    def _neuro_after_load():
+        persistent._neuro_game_started = True
+    config.after_load_callbacks.append(_neuro_after_load)
 
     # Overwrite the default say function
     _neuro_original_say = renpy.exports.say
@@ -609,6 +650,12 @@ init python:
                     "You have already seen this dialogue, you can skip it using this action.",
                     {}
                 )
+
+        if persistent._neuro_shutdown_requested:
+            _neuro_delayed_function(
+                3.0,
+                _neuro_leave_game
+            )
 
         # Progression
         if neuroconfig.progression_mode == "action":
@@ -783,7 +830,6 @@ init python:
     _neuro_original_ui_interact = renpy.ui.interact
     def _neuro_custom_ui_interact(*args, **kwargs):
         global _neuro_ui_buttons
-        global _neuro_game_started
         if '_neuro_ui_buttons' in globals() and len(_neuro_ui_buttons) > 0:
             # There are buttons available to interact with
             _neuro_cancel_delayed_functions()
