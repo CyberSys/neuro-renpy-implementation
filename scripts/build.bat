@@ -14,7 +14,7 @@ goto :loop
 
 :package
 echo Packaging...
-python ..\tools\rpatool.py -c neuro-implementation.rpa neuro-implementation.rpyc six.py json py2 websocket
+python ..\tools\rpatool.py -c neuro-implementation.rpa neuro-implementation.rpyc neuroconfigdefault.py six.py json py2 websocket
 move neuro-implementation.rpa ..\output\ >nul
 move neuroconfig.py ..\output\ >nul
 cd ..
