@@ -151,6 +151,29 @@ init python:
         }
         _neuro_send_ws_message(json.dumps(msg))
 
+    def _neuro_is_voiceover_playing():
+        channels = renpy.audio.audio.channels
+        for name, channel in channels.items():
+            is_voiceover = False
+            if getattr(channel, "mixer", None) == "voice":
+                is_voiceover = True
+            if "vo" in str(name).lower():
+                is_voiceover = True
+            if is_voiceover and channel.get_playing():
+                return True
+
+    def _neuro_call_func_after_voiceover(func, *args, **kwargs):
+        if neuro_get_config("wait_for_voiceover") and _neuro_is_voiceover_playing():
+            _neuro_delayed_function(
+                1.0,
+                _neuro_call_func_after_voiceover,
+                func,
+                *args,
+                **kwargs
+            )
+        else:
+            func(*args, **kwargs)
+
     ### SAVING / LOADING ###
 
     def _can_save():
@@ -272,7 +295,7 @@ init python:
         _neuro_send_ws_message(json.dumps(msg))
 
     def _neuro_handle_progress_dialogue_action(data):
-        renpy.exports.queue_event("dismiss")
+        _neuro_call_func_after_voiceover(renpy.exports.queue_event, "dismiss")
         return (True, "Progressing dialogue.")
 
     def _neuro_handle_skip_action(data):
@@ -689,12 +712,7 @@ init python:
         elif neuro_get_config("progression_mode") == "auto":
             _neuro_delayed_function(
                 neuro_get_config("max_progression_time"),
-                renpy.exports.queue_event,
-                "dismiss",
-            )
-            # In case the first one didn't go through... (actually happened during testing, idk why)
-            _neuro_delayed_function(
-                neuro_get_config("max_progression_time") + 5.0,
+                _neuro_call_func_after_voiceover,
                 renpy.exports.queue_event,
                 "dismiss",
             )
