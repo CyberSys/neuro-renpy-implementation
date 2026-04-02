@@ -49,3 +49,5 @@ allow_interaction = True
 min_interaction_time = 5.0
 # At a maximum, how long should it take before an interaction action is forced (in seconds)
 max_interaction_time = 60.0
+# If the Neuro API is allowed to skip seen dialogue
+allow_skipping = True

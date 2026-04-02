@@ -174,6 +174,27 @@ init python:
         else:
             func(*args, **kwargs)
 
+    def _neuro_can_skip():
+        if not neuro_get_config("allow_interaction"):
+            return False
+
+        if not neuro_get_config("allow_skipping"):
+            return False
+
+        if not config.allow_skipping:
+            return False
+
+        if not Skip().get_sensitive():
+            return False
+
+        try:
+            if renpy.get_statement_name() not in ("say", "say-nvl"):
+                return False
+
+            return renpy.seen_current(True)
+        except Exception:
+            return True
+
     ### SAVING / LOADING ###
 
     def _can_save():
@@ -529,7 +550,7 @@ init python:
         _neuro_delayed_function(
             neuro_get_config("max_progression_time") - neuro_get_config("min_progression_time"),
             neuro_force_action,
-            ["progress_dialogue"] + (["skip"] if Skip().get_sensitive() else []),
+            ["progress_dialogue"] + (["skip"] if _neuro_can_skip() else []),
             "Please progress the dialogue using the progress_dialogue action.",
         )
 
@@ -690,7 +711,7 @@ init python:
             neuro_give_context(_neuro_who_to_str(who) + ": " + _neuro_clean_str(what), silent=neuro_get_config("silent_dialogue"))
 
             # Allow skipping
-            if neuro_get_config("allow_interaction") and Skip().get_sensitive():
+            if _neuro_can_skip():
                 neuro_register_action(
                     "skip",
                     "You have already seen this dialogue, you can skip it using this action.",
