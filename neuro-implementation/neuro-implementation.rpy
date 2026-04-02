@@ -669,7 +669,6 @@ init python:
                             5.0,
                             _neuro_load
                         )
-            persistent._neuro_game_started = False
             
         # Set the game started flag if the label is "start"
         if name == "start":
