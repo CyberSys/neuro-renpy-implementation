@@ -1,4 +1,4 @@
-init python:
+init -1 python:
     DEFAULT_RENPY_SCREENS = {
         # in-game
         "say","choice","input","nvl","nvl_choice","notify","skip_indicator","ctc","keymap_screen",
@@ -390,7 +390,10 @@ init python:
                     renpy.show_screen("_neuro_return_screen", action.args[0])
                     _neuro_ui_buttons = []
                     continue
-            renpy.log(action.__class___.__name__)
+            if action.__class__.__name__ == "Function":
+                action.function(*action.args, **action.kwargs)
+                continue
+            #renpy.log(action.__class__.__name__)
             action()
         renpy.restart_interaction()
         neuro_unregister_action("click_button")
