@@ -44,5 +44,10 @@ max_interaction_time = 60.0
 
 
 ### DDLC SPECIFIC ###
-mention_swam = True
+
+# If set to True, the game will always branch off to a special branch which is usually triggered when OBS runs.
+# It will also change a bit what Monika says, referencing the swarm
+mention_swarm = True
+# In the last chapter, the game will try to read the "real" name of the player from PC settings.
+# This "real" name can be set here. By setting a value here, the game will also skip the safety check for streaming.
 real_name = "Neuro"
