@@ -72,6 +72,18 @@ init -1 python:
         finally:
             return _neuro_game_name
 
+    def _neuro_await_ws_connected(func, *args, **kwargs):
+        if _neuro_ws and _neuro_ws.sock and _neuro_ws.sock.connected:
+            func(*args, **kwargs)
+        else:
+            _neuro_delayed_function(
+                1.0,
+                _neuro_await_ws_connected,
+                func,
+                *args,
+                **kwargs
+            )
+
     def _neuro_delayed_function(delay, function, *args, **kwargs):
         # Delay cannot be less than or equal to zero
         delay = 0.1 if delay <= 0.0 else delay
@@ -713,7 +725,8 @@ init -1 python:
                     if neuro_get_config("auto_start"):
                         _neuro_delayed_function(
                             5.0,
-                            _neuro_load
+                            _neuro_await_ws_connected,
+                            _neuro_load,
                         )
             
         # Set the game started flag if the label is "start"
@@ -777,6 +790,7 @@ init -1 python:
             _neuro_delayed_function(
                 neuro_get_config("max_progression_time"),
                 _neuro_call_func_after_voiceover,
+                _neuro_await_ws_connected,
                 renpy.exports.queue_event,
                 "dismiss",
             )
