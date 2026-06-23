@@ -100,3 +100,32 @@ Example:
 
 python:
   neuro_force_action(["notify"], "Please say hello or bye to chat.")
+
+
+### neuro_get_config
+function neuro_get_config(key)
+
+Get a config value which was set by the user in `neuroconfig.py` or `neuro_set_config`.
+This allows having custom keys for the implementation in `neuroconfig.py`.
+Returns `None` if key cannot be found in config.\
+key (string): The key in the config
+
+
+Example:
+
+python:
+  value = neuro_get_config("some_key")
+
+
+### neuro_set_config
+function neuro_set_config(key, value, override_user_config=False)
+
+Sets the value in the config for a certain key.\
+key (string): The key to be set to\
+value (any): The value to be set\
+override_user_config (bool): If the value should be overwritten even if it has been set by the user in `neuroconfig.py`.
+If set to `False`, the user's setting will take precedence.
+
+python:
+  # Setting the default value for "some_key" if it has not been set by user in neuroconfig.py
+  neuro_set_config("some_key", "some_value", False)

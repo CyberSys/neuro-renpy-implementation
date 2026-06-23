@@ -9,9 +9,9 @@ For specific games, see the [Games](#games) section.
 This mod can also be used by developers who want to include Neuro Game API support in their Ren'Py game. For more information, see the [For Developers](#for-developers) section.
 
 ## Installation and Setup
-1. [Download the mod via GitHub](https://github.com/caheuer/neuro-renpy-implementation/archive/refs/heads/main.zip)
+1. Download the mod via GitHub. Go to the [latest release](https://github.com/caheuer/neuro-renpy-implementation/releases/latest) and download the specific integration for your game or the general release.
 2. Extract the files using your favorite ZIP file extractor
-3. Copy the **contents** (not the folder itself!) of the `neuro-implementation` folder into the `game` folder of the Ren'Py game.
+3. Copy the **contents** of the zip into the `game` folder of the Ren'Py game.
 Each Ren'Py game installation will have a `game` folder.
 4. Edit `neuroconfig.py` to configurate the mod to your liking.
 You can open the file with any text file editor, such as Notepad on Windows.
@@ -30,6 +30,7 @@ To use a template, please copy-paste the **contents** of the template file whils
 - Auto-starting the game with new game or last save if available
 - Auto-saving the game
 - Turning on and off features in a config file to customize for different use-cases and games
+- Going to main menu when receiving shutdown commands
 
 ### Context
 - Announcing game name, new game and save game load
@@ -46,7 +47,6 @@ To use a template, please copy-paste the **contents** of the template file whils
 
 ### Work In Progress / Future
 - Giving more context about sounds played and images displayed on screen
-- Supporting the proposed `shutdown` commands
 
 ## Games
 In general, the mod will work well on simple Ren'Py games.
@@ -81,7 +81,7 @@ Copy it into your Ren'Py project folder to launch it with the Ren'Py launcher.
 Please test if your game runs properly with the implementation before building.
 I recommend using the software [Tony by Pasu4](https://github.com/Pasu4/neuro-api-tony) for this.
 
-Mentioning the mod or me in your game is not neccessary, however if you wish to do so, please attribute "ChrisAusDemKlo" (my Twitch and Discord username).
+Mentioning the mod or me in your game is not necessary, however if you wish to do so, please attribute "ChrisAusDemKlo" (my Twitch and Discord username).
 
 
 ## Contributing
