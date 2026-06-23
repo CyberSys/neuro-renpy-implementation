@@ -11,7 +11,7 @@ init python:
             return (False, "Please supply a valid name.")
         store.player = name
         neuro_unregister_action("enter_name")
-        _neuro_ensure_show_screen("_neuro_finish_enter_name_screen")
+        _neuro_ensure_show_screen("_neuro_ddlc_finish_enter_name_screen")
         return (True, "Name entered.")
     neuro_action_handlers["enter_name"] = enter_name_func
     
@@ -50,6 +50,27 @@ init python:
         return (True, "File deleted.")
     neuro_action_handlers["delete_file"] = delete_file_func
 
+    # Give extra context at certain points in the game to describe what is happening on screen
+    def on_screen_context_func(id, delay=0):
+        if not neuro_get_config("on_screen_context"):
+            return
+
+        context_dict = {
+            "poem_game": "It's time to write a poem! Pick words you want to use in your poem.",
+            "sayori_hang": "On screen, you see Sayori hanging from the ceiling with her neck in a noose in her room.",
+            "yuri_stab": "On screen, you see Yuri stab herself multiple times, blood splashing out.",
+            "yuri_floor": "On screen, you see Yuri lifelessly leaning against a chair, blood on the floor around her.",
+            "natsuki_puke": "On screen, you see Natsuki holding her hand in front of her mouth and vomiting.",
+            "monika_room": "On screen, you see Monika sitting directly in front of you, staring at you. You are in the classroom which is overwise empty."
+        }
+        context = context_dict.get(id, "")
+        if context:
+            if delay > 0:
+                _neuro_ensure_show_screen("_neuro_ddlc_delayed_func_screen", delay, lambda: neuro_give_context(context, True))
+            else:
+                neuro_give_context(context, True)
+
+    # Overwrite label callback for delete_file action and extra context
     def ddlc_new_label_callback(old_func, name, jumped):
         if old_func is not None:
             old_func(name, jumped)
@@ -68,14 +89,24 @@ init python:
                     "required": ["filename"]
                 }
             )
+        elif name == "updateconsole":
+            neuro_give_context("In a console on the top left corner of the screen, the following appears:\n> " + getattr(renpy.store, "text") + "\n" + getattr(renpy.store, "history"), False)
+        elif name == "yuri_kill_2":
+            on_screen_context_func("yuri_floor")
+        elif name == "ch30_main":
+            on_screen_context_func("monika_room")
+        elif name == "poem":
+            on_screen_context_func("poem_game")
     _neuro_override_func(config, "label_callback", ddlc_new_label_callback, "ddlc")
 
-    # Overwrite currentuser and process_list on game save load
+    # Overwrite the say function to set the real name to that set in config, mentioning swarm and extra context
     def ddlc_new_say(old_func, who, what, interact=True, *args, **kwargs):
+        # real_name
         if neuro_get_config("real_name") is not None:
             if what.startswith("I'm talking to {i}you{/i}, [player]."):
                 store.currentuser = neuro_get_config("real_name")
                 store.process_list = []
+        # mention_swarm
         if neuro_get_config("mention_swarm"):
             if what == "Where do I start...?":
                 store.process_list = ["obs.exe"]
@@ -83,6 +114,14 @@ init python:
                 what = "Um...hi, swarm! That's what you call them, right?"
             elif what == "Sorry, I can't exactly read your comments from here...":
                 what = "Sorry, I can't exactly read chat from here..."
+        # on-screen context
+        if neuro_get_config("on_screen_context"):
+            if what == "{cps=30}.......Sayo--{/cps}{nw}":
+                on_screen_context_func("sayori_hang", 1.0)
+            elif what == "AHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHAHA{nw}":
+                on_screen_context_func("yuri_stab", 1.0)
+            elif what == "AAAAAAAAAAAAAAAHHHH!!!":
+                on_screen_context_func("natsuki_puke", 3.0)
         return old_func(who, what, interact, *args, **kwargs)
     _neuro_override_func(renpy, "say", ddlc_new_say, "ddlc")
 
@@ -101,7 +140,12 @@ init python:
         return old_func(name, *args, **kwargs)
     _neuro_override_func(renpy, "show", ddlc_new_show, "ddlc")
 
-screen _neuro_finish_enter_name_screen():
+screen _neuro_ddlc_finish_enter_name_screen():
     zorder 3000
     modal False
-    timer 3 action [Hide("_neuro_finish_enter_name_screen"), Function(FinishEnterName)]
+    timer 3 action [Hide("_neuro_ddlc_finish_enter_name_screen"), Function(FinishEnterName)]
+
+screen _neuro_ddlc_delayed_func_screen(delay, func):
+    zorder 3000
+    modal False
+    timer delay action [Hide("_neuro_ddlc_delayed_func_screen"), Function(func)]

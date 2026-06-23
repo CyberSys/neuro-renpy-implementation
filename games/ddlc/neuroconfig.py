@@ -45,6 +45,8 @@ max_interaction_time = 60.0
 
 ### DDLC SPECIFIC ###
 
+# Give extra context at certain points in the game to describe what is happening on screen
+on_screen_context = True
 # If set to True, the game will always branch off to a special branch which is usually triggered when OBS runs.
 # It will also change a bit what Monika says, referencing the swarm
 mention_swarm = True
