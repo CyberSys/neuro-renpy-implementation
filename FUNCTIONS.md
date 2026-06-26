@@ -5,9 +5,9 @@ Check out [the example project](examples/Example%20Game/game/script.rpy) for imp
 ### neuro_give_context
 function neuro_give_context(message, silent=False)
 
-Give context to Neuro.\
-message (string): The string to be given to Neuro as context.\
-silent (bool): If the context should be silently. If set to false, Neuro will reply to the context given.
+Give context to Neuro.
+- message (string): The string to be given to Neuro as context.
+- silent (bool): If the context should be silently. If set to false, Neuro will reply to the context given.
 
 Example:
 
@@ -42,10 +42,10 @@ python:
 ### neuro_register_action
 function neuro_register_action(action_name, action_description, action_schema)
 
-Register an action with the Neuro Game API.\
-action_name (string): The name of the action. This should be a lowercase string, with words separated by underscores or dashes (e.g. "join_friend_lobby", "use_item").\
-action_description (string): A description of what the action does.\
-schema (dict): A JSON schema describing the expected return data.
+Register an action with the Neuro Game API.
+- action_name (string): The name of the action. This should be a lowercase string, with words separated by underscores or dashes (e.g. "join_friend_lobby", "use_item").
+- action_description (string): A description of what the action does.
+- schema (dict): A JSON schema describing the expected return data.
 
 Example:
 
@@ -71,8 +71,8 @@ python:
 ### neuro_unregister_action
 function neuro_unregister_action(action_name)
 
-Unregister an action with the Neuro Game API.\
-action_name (string): The name of the action.
+Unregister an action with the Neuro Game API.
+- action_name (string): The name of the action.
 
 Example:
 
@@ -101,9 +101,9 @@ python:
 ### neuro_force_action
 function neuro_force_action(action_names, query)
 
-Force one or more actions with the Neuro Game API.\
-action_names (list(string)): The names of the actions to force.\
-query (string): A message that is sent along the force.
+Force one or more actions with the Neuro Game API.
+- action_names (list(string)): The names of the actions to force.
+- query (string): A message that is sent along the force.
 
 
 Example:
@@ -119,8 +119,8 @@ function neuro_get_config(key)
 
 Get a config value which was set by the user in `neuroconfig.py` or `neuro_set_config`.
 This allows having custom keys for the implementation in `neuroconfig.py`.
-Returns `None` if key cannot be found in config.\
-key (string): The key in the config
+Returns `None` if key cannot be found in config.
+- key (string): The key in the config
 
 
 Example:
@@ -134,10 +134,10 @@ python:
 ### neuro_set_config
 function neuro_set_config(key, value, override_user_config=False)
 
-Sets the value in the config for a certain key.\
-key (string): The key to be set to\
-value (any): The value to be set\
-override_user_config (bool): If the value should be overwritten even if it has been set by the user in `neuroconfig.py`.
+Sets the value in the config for a certain key.
+- key (string): The key to be set to
+- value (any): The value to be set
+- override_user_config (bool): If the value should be overwritten even if it has been set by the user in `neuroconfig.py`.
 If set to `False`, the user's setting will take precedence.
 
 Example:
