@@ -11,8 +11,10 @@ silent (bool): If the context should be silently. If set to false, Neuro will re
 
 Example:
 
+```renpy
 python:
   neuro_give_context("A wild Vedal appears on screen!", silent=True)
+```
 
 
 ### neuro_action_handlers
@@ -24,6 +26,7 @@ Be sure to return a (success, message) tuple.
 
 Example:
 
+```renpy
 python:
   def notify_func(data):
     text = data.get("text")
@@ -33,6 +36,7 @@ python:
     return (True, "Text displayed.")
   
   neuro_action_handlers["notify"] = notify_func
+```
 
 
 ### neuro_register_action
@@ -45,6 +49,7 @@ schema (dict): A JSON schema describing the expected return data.
 
 Example:
 
+```renpy
 python:
   neuro_register_action(
     "notify",
@@ -60,6 +65,7 @@ python:
       "required": ["text"]
     }
   )
+```
 
 
 ### neuro_unregister_action
@@ -70,8 +76,10 @@ action_name (string): The name of the action.
 
 Example:
 
+```renpy
 python:
   neuro_unregister_action("notify")
+```
 
 
 ### neuro_unregister_all_actions
@@ -84,8 +92,10 @@ Unregister all currently registered actions with the Neuro Game API.
 
 Example:
 
+```renpy
 python:
   neuro_unregister_all_actions()
+```
 
 
 ### neuro_force_action
@@ -98,8 +108,10 @@ query (string): A message that is sent along the force.
 
 Example:
 
+```renpy
 python:
   neuro_force_action(["notify"], "Please say hello or bye to chat.")
+```
 
 
 ### neuro_get_config
@@ -113,8 +125,10 @@ key (string): The key in the config
 
 Example:
 
+```renpy
 python:
   value = neuro_get_config("some_key")
+```
 
 
 ### neuro_set_config
@@ -128,6 +142,8 @@ If set to `False`, the user's setting will take precedence.
 
 Example:
 
+```renpy
 python:
   # Setting the default value for "some_key" if it has not been set by user in neuroconfig.py
   neuro_set_config("some_key", "some_value", False)
+```
