@@ -1,5 +1,7 @@
 .vscode/
 test/
+temp/
+output/
 
 # Ren'Py project
 log.txt

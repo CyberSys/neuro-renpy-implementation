@@ -1,4 +1,4 @@
-init python:
+init -1 python:
     DEFAULT_RENPY_SCREENS = {
         # in-game
         "say","choice","input","nvl","nvl_choice","notify","skip_indicator","ctc","keymap_screen",
@@ -7,37 +7,38 @@ init python:
         "help","history","file_picker","joystick_preferences","quick_menu"
     }
 
-    import neuroconfig
-    if neuroconfig.save_log:
-        config.log = "neuro_log.txt"
+    class Empty(object):
+        pass
+
+    import neuroconfigdefault
+    try:
+        import neuroconfig
+        if hasattr(neuroconfig, "save_log") and neuroconfig.save_log:
+            config.log = "neuro_log.txt"
+    except ImportError:
+        neuroconfig = Empty()
+        if neuroconfigdefault.save_log:
+            config.log = "neuro_log.txt"
+        renpy.log("[NEURO] Failed to load neuroconfig.py")
 
     renpy.log("[NEURO] Initializing Neuro Implementation...")
     
-    _neuro_game_started = False
+    persistent._neuro_game_started = False
+    persistent._neuro_shutdown_requested = False
 
-    # We need hmac.py and ssl.py for websocket-client to work in older Ren'Py versions, such as the one used in DDLC.
-    # However, these break under newer Ren'Py versions, so we need to remove them in that case.
-    import sys
-    import os
-    game_dir = os.path.join(config.basedir, "game")
-    import_error = False
     try:
-        import websocket
+        __import__("hmac")
     except:
-        import_error = True
-    if import_error:
-        hmac_path = os.path.join(game_dir, "hmac.py")
-        ssl_path = os.path.join(game_dir, "ssl.py")
-        deleted = False
-        if os.path.exists(hmac_path):
-            os.remove(hmac_path)
-            deleted = True
-        if os.path.exists(ssl_path):
-            os.remove(ssl_path)
-            deleted = True
-        if deleted:
-            renpy.log("[NEURO] Removed hmac.py and/or ssl.py to ensure compatibility with newer Ren'Py versions, restarting the game...")
-            renpy.quit(relaunch=True)     
+        renpy.log("[NEURO] Module hmac not found, trying to import from py2...")
+        from py2 import hmac as hmac2
+        sys.modules["hmac"] = hmac2
+
+    try:
+        __import__("ssl")
+    except:
+        renpy.log("[NEURO] Module ssl not found, trying to import from py2...")
+        from py2 import ssl as ssl2
+        sys.modules["ssl"] = ssl2
 
     import websocket
     import json
@@ -45,6 +46,19 @@ init python:
     import types
     import re
     import renpy as r
+
+    ### CONFIGURATION ###
+    def neuro_get_config(key):
+        ret = getattr(neuroconfig, key, None)
+        if ret is None:
+            ret = getattr(neuroconfigdefault, key, None)
+        return ret
+
+    def neuro_set_config(key, value, override_user_config=False):
+        if override_user_config:
+            setattr(neuroconfig, key, value)
+        else:
+            setattr(neuroconfigdefault, key, value)
 
     ### HELPER FUNCTIONS ###
 
@@ -58,23 +72,77 @@ init python:
         finally:
             return _neuro_game_name
 
+    def _neuro_await_ws_connected(func, *args, **kwargs):
+        if _neuro_ws and _neuro_ws.sock and _neuro_ws.sock.connected:
+            func(*args, **kwargs)
+        else:
+            _neuro_delayed_function(
+                1.0,
+                _neuro_await_ws_connected,
+                func,
+                *args,
+                **kwargs
+            )
+
     def _neuro_delayed_function(delay, function, *args, **kwargs):
         # Delay cannot be less than or equal to zero
         delay = 0.1 if delay <= 0.0 else delay
-        # We use five different screens to allow multiple delayed functions to be scheduled at the same time
-        global _neuro_delayed_function_screen_num
-        if "_neuro_delayed_function_screen_num" not in globals():
-            _neuro_delayed_function_screen_num = 0
-        screen_name = "_neuro_delayed_function_screen" if _neuro_delayed_function_screen_num == 0 else ("_neuro_delayed_function_screen_" + str(_neuro_delayed_function_screen_num + 1))
-        renpy.show_screen(screen_name, delay, function, args, kwargs)
-        _neuro_delayed_function_screen_num = (_neuro_delayed_function_screen_num + 1) % 5
+        # We use ten different screens to allow multiple delayed functions to be scheduled at the same time
+        global _neuro_delayed_function_screens_active
+        if "_neuro_delayed_function_screens_active" not in globals():
+            _neuro_delayed_function_screens_active = [False, False, False, False, False, False, False, False, False, False]
+        index = None
+        for i in range(10):
+            if _neuro_delayed_function_screens_active[i]:
+                index = None
+            elif index is None:
+                index = i
+        if index is None:
+            raise Exception("No available screens to schedule the delayed function. Maximum number of concurrent delayed functions is 10.")
+        _neuro_delayed_function_screens_active[index] = True
+        screen_name = "_neuro_delayed_function_screen_" + str(index)
+        _neuro_ensure_show_screen(screen_name, delay, function, args, kwargs)
 
     def _neuro_cancel_delayed_functions():
-        renpy.hide_screen("_neuro_delayed_function_screen")
+        renpy.hide_screen("_neuro_delayed_function_screen_0")
+        renpy.hide_screen("_neuro_delayed_function_screen_1")
         renpy.hide_screen("_neuro_delayed_function_screen_2")
         renpy.hide_screen("_neuro_delayed_function_screen_3")
         renpy.hide_screen("_neuro_delayed_function_screen_4")
         renpy.hide_screen("_neuro_delayed_function_screen_5")
+        renpy.hide_screen("_neuro_delayed_function_screen_6")
+        renpy.hide_screen("_neuro_delayed_function_screen_7")
+        renpy.hide_screen("_neuro_delayed_function_screen_8")
+        renpy.hide_screen("_neuro_delayed_function_screen_9")
+        global _neuro_delayed_function_screens_active
+        _neuro_delayed_function_screens_active = [False, False, False, False, False, False, False, False, False, False]
+
+    def _neuro_cancel_delayed_function(index):
+        renpy.hide_screen("_neuro_delayed_function_screen_" + str(index))
+        global _neuro_delayed_function_screens_active
+        if 0 <= index < len(_neuro_delayed_function_screens_active):
+            _neuro_delayed_function_screens_active[index] = False
+
+    def _neuro_ensure_show_screen(screen_name, *args, **kwargs):
+        while True:
+            s = renpy.get_screen(screen_name)
+            if s:
+                return s
+            renpy.show_screen(screen_name, *args, **kwargs)
+            renpy.restart_interaction()
+
+    def _neuro_override_func(owner, func_name, new_func, override_id="default"):
+        old_func = getattr(owner, func_name)
+
+        if getattr(old_func, "_neuro_override", None) == override_id:
+            return
+
+        def f(*args, **kwargs):
+            return new_func(old_func, *args, **kwargs)
+
+        f._neuro_override = override_id if override_id is not None else "default"
+
+        setattr(owner, func_name, f)
 
     def _neuro_clean_str(s):
         s = renpy.exports.substitute(s) # Translations and variables
@@ -118,14 +186,87 @@ init python:
         else:
             return str(who)
 
+    def _neuro_leave_game(force=False):
+        persistent._neuro_shutdown_requested = True
+        if not _can_save() and not force:
+            return
+        renpy.log("[NEURO] Leaving the game and returning to the main menu...")
+        neuro_give_context("Leaving the game and returning to the main menu.")
+        _neuro_cancel_delayed_functions()
+        neuro_unregister_all_actions()
+        _neuro_save()
+        _neuro_delayed_function(
+            0.1,
+            renpy.full_restart
+        )
+        msg = {
+            "command": "shutdown/ready",
+            "game": _neuro_get_game_name(),
+        }
+        _neuro_send_ws_message(json.dumps(msg))
+
+    def _neuro_is_voiceover_playing():
+        channels = renpy.audio.audio.channels
+        for name, channel in channels.items():
+            is_voiceover = False
+            if getattr(channel, "mixer", None) == "voice":
+                is_voiceover = True
+            if "vo" in str(name).lower():
+                is_voiceover = True
+            if is_voiceover and channel.get_playing():
+                return True
+
+    def _neuro_call_func_after_voiceover(func, *args, **kwargs):
+        if neuro_get_config("wait_for_voiceover") and _neuro_is_voiceover_playing():
+            _neuro_delayed_function(
+                1.0,
+                _neuro_call_func_after_voiceover,
+                func,
+                *args,
+                **kwargs
+            )
+        else:
+            func(*args, **kwargs)
+
+    def _neuro_can_skip():
+        if not neuro_get_config("allow_interaction"):
+            return False
+
+        if not neuro_get_config("allow_skipping"):
+            return False
+
+        if not config.allow_skipping:
+            return False
+
+        if not Skip().get_sensitive():
+            return False
+
+        try:
+            if renpy.get_statement_name() not in ("say", "say-nvl"):
+                return False
+
+            return renpy.seen_current(True)
+        except Exception:
+            return True
 
     ### SAVING / LOADING ###
 
+    def _can_save():
+        if main_menu:
+            return False
+        try:
+            return config.save and (renpy.context_nesting_level() == 0)
+        except:
+            # Older Ren'Py versions don't have config.save or renpy.context_nesting_level, so just assume we can save
+            return True
+
     def _neuro_save():
-        if not neuroconfig.save_game:
+        if not neuro_get_config("save_game"):
             return
-        if not _neuro_game_started:
+        if not persistent._neuro_game_started:
             renpy.log("[NEURO] Game has not started yet, skipping save.")
+            return
+        if not _can_save():
             return
         renpy.log("[NEURO] Saving the game...")
         try:
@@ -137,12 +278,12 @@ init python:
         return renpy.can_load(renpy.newest_slot())
 
     def _neuro_load(force_new_game=False):
-        if renpy.can_load(renpy.newest_slot()) and not force_new_game and neuroconfig.save_game:
+        if renpy.can_load(renpy.newest_slot()) and not force_new_game and neuro_get_config("save_game"):
             # Load the last saved state
             neuro_give_context("Loading your last saved state. You will start off where you left off.", silent=True)
             renpy.load(renpy.newest_slot())
             neuro_give_context("Loading your last saved state failed. Starting a new game instead.", silent=True)
-            renpy.log("[NEURO] Failed to load the last saved state: {}".format(str(e)))
+            renpy.log("[NEURO] Failed to load the last saved state")
         # Start a new game if no save was found or force_new_game is True or save_game in neuroconfig is False
         renpy.jump_out_of_context("start")
 
@@ -150,7 +291,7 @@ init python:
     ### CONTEXT ###
 
     def neuro_give_context(message, silent=False):
-        if not neuroconfig.give_context:
+        if not neuro_get_config("give_context"):
             return
         msg = {
             "command": "context",
@@ -229,7 +370,7 @@ init python:
         _neuro_send_ws_message(json.dumps(msg))
 
     def _neuro_handle_progress_dialogue_action(data):
-        renpy.exports.queue_event("dismiss")
+        _neuro_call_func_after_voiceover(renpy.exports.queue_event, "dismiss")
         return (True, "Progressing dialogue.")
 
     def _neuro_handle_skip_action(data):
@@ -257,8 +398,7 @@ init python:
             else:
                 message = "You selected the option: {}".format(option)
                 renpy.notify("Selected: \"" + option + "\"")
-                renpy.show_screen("_neuro_return_screen", choice[2])
-                renpy.restart_interaction()
+                _neuro_ensure_show_screen("_neuro_return_screen", choice[2])
         except Exception as e:
             success = False
             message = "ERROR: An error occurred while selecting the option: {}".format(str(e))
@@ -274,8 +414,7 @@ init python:
         else:
             message = "You provided the input: {}".format(user_input)
             renpy.notify("Input: \"" + user_input + "\"")
-            renpy.show_screen("_neuro_return_screen", user_input)
-            renpy.restart_interaction()
+            _neuro_ensure_show_screen("_neuro_return_screen", user_input)
         return (success, message)
 
     def _neuro_click_button(button_txt):
@@ -289,21 +428,24 @@ init python:
         for action in actions:
             if action.__class__.__name__ == "Return":
                 value = getattr(action, "value", None)
-                renpy.show_screen("_neuro_return_screen", value)
+                _neuro_ensure_show_screen("_neuro_return_screen", value)
                 _neuro_ui_buttons = []
                 continue
             if action.__class__.__name__ == "ChoiceReturn":
                 value = getattr(action, "value", None)
-                renpy.show_screen("_neuro_return_screen", value)
+                _neuro_ensure_show_screen("_neuro_return_screen", value)
                 _neuro_ui_buttons = []
                 continue
             if action.__class__.__name__ == "Curry":
                 fn = getattr(action, "callable", None)
                 if getattr(fn, "__name__", None) == "_returns":
-                    renpy.show_screen("_neuro_return_screen", action.args[0])
+                    _neuro_ensure_show_screen("_neuro_return_screen", action.args[0])
                     _neuro_ui_buttons = []
                     continue
-            renpy.log(action.__class___.__name__)
+            if action.__class__.__name__ == "Function":
+                action.function(*action.args, **action.kwargs)
+                continue
+            #renpy.log(action.__class__.__name__)
             action()
         renpy.restart_interaction()
         neuro_unregister_action("click_button")
@@ -323,8 +465,11 @@ init python:
         else:
             message = "You clicked the button: {}".format(button_txt)
             renpy.notify("Clicked: \"" + button_txt + "\"")
-            renpy.show_screen("_neuro_click_button_screen", button_txt)
-            renpy.restart_interaction()
+            _neuro_delayed_function(
+                0.1,
+                _neuro_click_button,
+                button_txt
+            )
         return (success, message)
 
     neuro_action_handlers = {
@@ -420,7 +565,13 @@ init python:
                 }
             }
             _neuro_send_ws_message(json.dumps(msg), ws)
-
+        elif data.get("command") == "shutdown/graceful":
+            # Go to the main menu when dialogue is done
+            renpy.log("[NEURO] Received shutdown command, will leave the game at the next opportunity.")
+            persistent._neuro_shutdown_requested = data.get("data", {}).get("wants_shutdown", True)
+        elif data.get("command") == "shutdown/immediate":
+            # Immediately go to the main menu
+            _neuro_leave_game(True)
     def _neuro_ws_on_error(ws, error):
         renpy.log("[NEURO] Error occurred:", error)
 
@@ -429,16 +580,19 @@ init python:
 
     def _neuro_ws_run():
         global _neuro_ws
-        while True:
-            _neuro_ws = websocket.WebSocketApp(
-                neuroconfig.ws_url,
-                on_open=_neuro_ws_on_open,
-                on_message=_neuro_ws_on_message,
-                on_error=_neuro_ws_on_error,
-                on_close=_neuro_ws_on_close
-            )
-            _neuro_ws.run_forever()
-            time.sleep(1) # Wait before trying to reconnect
+        try:
+            while True:
+                _neuro_ws = websocket.WebSocketApp(
+                    neuro_get_config("ws_url"),
+                    on_open=_neuro_ws_on_open,
+                    on_message=_neuro_ws_on_message,
+                    on_error=_neuro_ws_on_error,
+                    on_close=_neuro_ws_on_close
+                )
+                _neuro_ws.run_forever()
+                time.sleep(1) # Wait before trying to reconnect
+        except Exception as e:
+            renpy.log("[NEURO] Exception in WebSocket thread: {}".format(str(e)))
     renpy.invoke_in_thread(_neuro_ws_run)
 
 
@@ -452,9 +606,9 @@ init python:
             {}
         )
         _neuro_delayed_function(
-            neuroconfig.max_progression_time - neuroconfig.min_progression_time,
+            neuro_get_config("max_progression_time") - neuro_get_config("min_progression_time"),
             neuro_force_action,
-            ["progress_dialogue"] + (["skip"] if Skip().get_sensitive() else []),
+            ["progress_dialogue"] + (["skip"] if _neuro_can_skip() else []),
             "Please progress the dialogue using the progress_dialogue action.",
         )
 
@@ -466,7 +620,7 @@ init python:
             {}
         )
         _neuro_delayed_function(
-            neuroconfig.max_interaction_time - neuroconfig.min_interaction_time,
+            neuro_get_config("max_interaction_time") - neuro_get_config("min_interaction_time"),
             neuro_force_action,
             ["continue"],
             "Please continue the game using the continue action.",
@@ -489,7 +643,7 @@ init python:
             }
         )
         _neuro_delayed_function(
-            neuroconfig.max_interaction_time - neuroconfig.min_interaction_time,
+            neuro_get_config("max_interaction_time") - neuro_get_config("min_interaction_time"),
             neuro_force_action,
             ["select_option"],
             "Please select an option using the select_option action.",
@@ -512,7 +666,7 @@ init python:
             }
         )
         _neuro_delayed_function(
-            neuroconfig.max_interaction_time - neuroconfig.min_interaction_time,
+            neuro_get_config("max_interaction_time") - neuro_get_config("min_interaction_time"),
             neuro_force_action,
             ["input"],
             "Please provide input using the input action.",
@@ -535,7 +689,7 @@ init python:
             }
         )
         _neuro_delayed_function(
-            neuroconfig.max_interaction_time - neuroconfig.min_interaction_time,
+            neuro_get_config("max_interaction_time") - neuro_get_config("min_interaction_time"),
             neuro_force_action,
             ["click_button"],
             "Please click a button using the click_button action.",
@@ -546,52 +700,55 @@ init python:
 
     # Register the label callback
     def _neuro_on_label(name, jumped):
-        global _neuro_game_started
         # Hide all delayed function screens when a label is jumped to
         # This is to ensure that the delayed function screen does not keep on running on menus
         _neuro_cancel_delayed_functions()
         if "main_menu" in name:
-            if _neuro_game_started:
-                # Game has just ended, start a new game or close the game window depending on the game_over_action config
-                if neuroconfig.game_over_action == "new_game":
-                    neuro_give_context("The game is over. Starting a new game.", silent=True)
-                    _neuro_delayed_function(
-                        5.0,
-                        _neuro_load,
-                        True
-                    )
-                elif neuroconfig.game_over_action == "close":
-                    neuro_give_context("The game is over. Closing the game window.", silent=True)
-                    _neuro_delayed_function(
-                        5.0,
-                        renpy.quit
-                    )
-            else:
-                # Auto-start the game if the main menu is loaded and auto_start is enabled
-                if neuroconfig.auto_start:
-                    _neuro_delayed_function(
-                        5.0,
-                        _neuro_load
-                    )
-            _neuro_game_started = False
+            if not persistent._neuro_shutdown_requested:
+                if persistent._neuro_game_started:
+                    # Game has just ended, start a new game or close the game window depending on the game_over_action config
+                    if neuro_get_config("game_over_action") == "new_game":
+                        neuro_give_context("The game is over. Starting a new game.", silent=True)
+                        _neuro_delayed_function(
+                            5.0,
+                            _neuro_load,
+                            True
+                        )
+                    elif neuro_get_config("game_over_action") == "close":
+                        neuro_give_context("The game is over. Closing the game window.", silent=True)
+                        _neuro_delayed_function(
+                            5.0,
+                            renpy.quit
+                        )
+                else:
+                    # Auto-start the game if the main menu is loaded and auto_start is enabled
+                    if neuro_get_config("auto_start"):
+                        _neuro_delayed_function(
+                            5.0,
+                            _neuro_await_ws_connected,
+                            _neuro_load,
+                        )
             
         # Set the game started flag if the label is "start"
         if name == "start":
-            _neuro_game_started = True
+            persistent._neuro_game_started = True
     try:
         config.label_callbacks.append(_neuro_on_label)
     except:
         # Older Ren'Py versions may not have label_callbacks but use config.label_callback instead
-        old_label_callback = config.label_callback
-        def new_label_callback(name, jumped):
-            if old_label_callback is not None:
-                old_label_callback(name, jumped)
+        def new_label_callback(old_func, name, jumped):
+            if old_func is not None:
+                old_func(name, jumped)
             _neuro_on_label(name, jumped)
-        config.label_callback = new_label_callback
+        _neuro_override_func(config, "label_callback", new_label_callback)
+
+    # Register the after load callback
+    def _neuro_after_load():
+        persistent._neuro_game_started = True
+    config.after_load_callbacks.append(_neuro_after_load)
 
     # Overwrite the default say function
-    _neuro_original_say = renpy.exports.say
-    def _neuro_custom_say(who, what, interact=True, *args, **kwargs):
+    def _neuro_custom_say(old_func, who, what, interact=True, *args, **kwargs):
         _neuro_cancel_delayed_functions()
 
         if not renpy.config.skipping and what:
@@ -607,69 +764,67 @@ init python:
             global _neuro_ui_buttons
             _neuro_ui_buttons = []
 
-            neuro_give_context(_neuro_who_to_str(who) + ": " + _neuro_clean_str(what), silent=neuroconfig.silent_dialogue)
+            neuro_give_context(_neuro_who_to_str(who) + ": " + _neuro_clean_str(what), silent=neuro_get_config("silent_dialogue"))
 
             # Allow skipping
-            if neuroconfig.allow_interaction and Skip().get_sensitive():
+            if _neuro_can_skip():
                 neuro_register_action(
                     "skip",
                     "You have already seen this dialogue, you can skip it using this action.",
                     {}
                 )
 
-        # Progression
-        if neuroconfig.progression_mode == "action":
+        if persistent._neuro_shutdown_requested:
             _neuro_delayed_function(
-                neuroconfig.min_progression_time,
+                3.0,
+                _neuro_leave_game
+            )
+
+        # Progression
+        if neuro_get_config("progression_mode") == "action":
+            _neuro_delayed_function(
+                neuro_get_config("min_progression_time"),
                 _neuro_register_progress_dialogue_action_and_deadline
             )
-        elif neuroconfig.progression_mode == "auto":
+        elif neuro_get_config("progression_mode") == "auto":
             _neuro_delayed_function(
-                neuroconfig.max_progression_time,
-                renpy.exports.queue_event,
-                "dismiss",
-            )
-            # In case the first one didn't go through... (actually heppened during testing, idk why)
-            _neuro_delayed_function(
-                neuroconfig.max_progression_time + 5.0,
+                neuro_get_config("max_progression_time"),
+                _neuro_call_func_after_voiceover,
+                _neuro_await_ws_connected,
                 renpy.exports.queue_event,
                 "dismiss",
             )
 
-        return _neuro_original_say(who, what, interact, *args, **kwargs)
-    renpy.exports.say = _neuro_custom_say
-    del _neuro_custom_say
+        return old_func(who, what, interact, *args, **kwargs)
+    _neuro_override_func(renpy.exports, "say", _neuro_custom_say)
 
     # Overwrite the default menu function
-    _neuro_original_menu = renpy.exports.menu
-    def _neuro_custom_menu(items, *args, **kwargs):
+    def _neuro_custom_menu(old_func, items, *args, **kwargs):
         global _neuro_menu_choices
         _neuro_menu_choices = list(filter(lambda choice: r.python.py_eval(choice[1]), items))
 
         neuro_unregister_action("progress_dialogue")
         neuro_unregister_action("skip")
 
-        if neuroconfig.allow_interaction:
+        if neuro_get_config("allow_interaction"):
             _neuro_delayed_function(
-                neuroconfig.min_interaction_time,
+                neuro_get_config("min_interaction_time"),
                 _neuro_register_select_option_action_and_deadline,
                 _neuro_menu_choices
             )
 
         neuro_give_context("A menu appears with the following choices: " + ", ".join(["\"" + _neuro_clean_str(choice[0]) + "\"" for choice in _neuro_menu_choices]) + "." \
-            + (" You must choose one using the select_option action once it appears." if neuroconfig.allow_interaction else ""),
-            silent=neuroconfig.silent_choices)
+            + (" You must choose one using the select_option action once it appears." if neuro_get_config("allow_interaction") else ""),
+            silent=neuro_get_config("silent_choices"))
         
-        rv = _neuro_original_menu(items, *args, **kwargs)
+        rv = old_func(items, *args, **kwargs)
         neuro_unregister_action("select_option")
 
         return rv
-    renpy.exports.menu = _neuro_custom_menu
-    del _neuro_custom_menu
+    _neuro_override_func(renpy.exports, "menu", _neuro_custom_menu)
 
     # Overwrite the default input function
-    _neuro_original_input = renpy.exports.input
-    def _neuro_custom_input(prompt, default="", *args, **kwargs):
+    def _neuro_custom_input(old_func, prompt, default="", *args, **kwargs):
         prompt_sub = _neuro_clean_str(prompt)
 
         _neuro_cancel_delayed_functions()
@@ -681,9 +836,9 @@ init python:
         neuro_unregister_action("click_button")
         neuro_unregister_action("input")
 
-        if neuroconfig.allow_interaction:
+        if neuro_get_config("allow_interaction"):
             _neuro_delayed_function(
-                neuroconfig.min_interaction_time,
+                neuro_get_config("min_interaction_time"),
                 _neuro_register_input_action_and_deadline,
                 prompt_sub,
                 default,
@@ -691,18 +846,16 @@ init python:
 
         neuro_give_context("An input prompt appears with the following message: '{}'.".format(prompt_sub) \
             + (" The default input is '{}'.".format(default) if default else "") \
-            + (" You must provide input using the input action once it appears." if neuroconfig.allow_interaction else ""),
-            silent=neuroconfig.silent_choices)
+            + (" You must provide input using the input action once it appears." if neuro_get_config("allow_interaction") else ""),
+            silent=neuro_get_config("silent_choices"))
 
-        rv = _neuro_original_input(prompt, default, *args, **kwargs)
+        rv = old_func(prompt, default, *args, **kwargs)
         neuro_unregister_action("input")
 
         return rv
-    renpy.exports.input = _neuro_custom_input
-    del _neuro_custom_input
+    _neuro_override_func(renpy.exports, "input", _neuro_custom_input)
 
     # Overwrite the default show screen function to catch custom menus, modals, etc.
-    _neuro_original_show_screen = renpy.exports.show_screen
     def _neuro_handle_screen(screen_name):
         try:
             screen = renpy.exports.get_screen(screen_name)
@@ -710,22 +863,22 @@ init python:
                 renpy.log("[NEURO] Screen '{}' not found.".format(screen_name))
                 return
             buttons = _neuro_find_buttons_in_displayble(screen)
-            if neuroconfig.allow_interaction and len(buttons) > 0:
+            if neuro_get_config("allow_interaction") and len(buttons) > 0:
                 global _neuro_ui_buttons
                 _neuro_ui_buttons = buttons
                 _neuro_delayed_function(
-                    neuroconfig.min_interaction_time,
+                    neuro_get_config("min_interaction_time"),
                     _neuro_register_click_button_action_and_deadline
                 )
             neuro_give_context(
                 "A {} screen appears with the following content:\n\"{}\"".format(screen_name, _neuro_get_displayable_text(screen)) \
-                + ("\nYou must interact with the screen using the actions provided to you once they appear." if neuroconfig.allow_interaction and len(buttons) > 0 else ""),
-                silent=neuroconfig.silent_choices
+                + ("\nYou must interact with the screen using the actions provided to you once they appear." if neuro_get_config("allow_interaction") and len(buttons) > 0 else ""),
+                silent=neuro_get_config("silent_choices")
             )
         except Exception as e:
             renpy.log("[NEURO] Error handling screen '{}': {}".format(screen_name, str(e)))
-    def _neuro_custom_show_screen(screen_name, *args, **kwargs):
-        _neuro_original_show_screen(screen_name, *args, **kwargs)
+    def _neuro_custom_show_screen(old_func, screen_name, *args, **kwargs):
+        old_func(screen_name, *args, **kwargs)
         if screen_name.startswith("_neuro"):
             return
         if screen_name in DEFAULT_RENPY_SCREENS:
@@ -739,66 +892,57 @@ init python:
             _neuro_handle_screen,
             screen_name
         )
-    renpy.exports.show_screen = _neuro_custom_show_screen
-    del _neuro_custom_show_screen
+    _neuro_override_func(renpy.exports, "show_screen", _neuro_custom_show_screen)
 
     # Overwrite the default ui.button function to catch buttons created in code
-    _neuro_original_ui_button = renpy.ui.button
-    def _neuro_custom_ui_button(*args, **kwargs):
-        button = _neuro_original_ui_button(*args, **kwargs)
-        if neuroconfig.allow_interaction:
+    def _neuro_custom_ui_button(old_func, *args, **kwargs):
+        button = old_func(*args, **kwargs)
+        if neuro_get_config("allow_interaction"):
             global _neuro_ui_buttons
             try:
                 _neuro_ui_buttons.append(button)
             except:
                 _neuro_ui_buttons = [button]
         return button
-    renpy.ui.button = _neuro_custom_ui_button
-    del _neuro_custom_ui_button
+    _neuro_override_func(renpy.ui, "button", _neuro_custom_ui_button)
 
     # Overwrite the default ui.textbutton function to catch text buttons created in code
-    _neuro_original_ui_textbutton = renpy.ui.textbutton
-    def _neuro_custom_ui_textbutton(*args, **kwargs):
+    def _neuro_custom_ui_textbutton(old_func, *args, **kwargs):
         button = renpy.display.behavior.Button(**kwargs)
         text = renpy.text.text.Text(args[0])
         button.add(text)
-        if neuroconfig.allow_interaction:
+        if neuro_get_config("allow_interaction"):
             global _neuro_ui_buttons
             try:
                 _neuro_ui_buttons.append(button)
             except:
                 _neuro_ui_buttons = [button]
-        return _neuro_original_ui_textbutton(*args, **kwargs)
-    renpy.ui.textbutton = _neuro_custom_ui_textbutton
-    del _neuro_custom_ui_textbutton
+        return old_func(*args, **kwargs)
+    _neuro_override_func(renpy.ui, "textbutton", _neuro_custom_ui_textbutton)
 
     # Overwrite the default ui.imagebutton function to catch image buttons created in code
-    _neuro_original_ui_imagebutton = renpy.ui.imagebutton
-    def _neuro_custom_ui_imagebutton(*args, **kwargs):
-        button = _neuro_original_ui_imagebutton(*args, **kwargs)
-        if neuroconfig.allow_interaction:
+    def _neuro_custom_ui_imagebutton(old_func, *args, **kwargs):
+        button = old_func(*args, **kwargs)
+        if neuro_get_config("allow_interaction"):
             global _neuro_ui_buttons
             try:
                 _neuro_ui_buttons.append(button)
             except:
                 _neuro_ui_buttons = [button]
         return button
-    renpy.ui.imagebutton = _neuro_custom_ui_imagebutton
-    del _neuro_custom_ui_imagebutton
+    _neuro_override_func(renpy.ui, "imagebutton", _neuro_custom_ui_imagebutton)
 
     # Overwrite the default ui.interact function to catch whenever the game expects user interaction
-    _neuro_original_ui_interact = renpy.ui.interact
-    def _neuro_custom_ui_interact(*args, **kwargs):
+    def _neuro_custom_ui_interact(old_func, *args, **kwargs):
         global _neuro_ui_buttons
-        global _neuro_game_started
         if '_neuro_ui_buttons' in globals() and len(_neuro_ui_buttons) > 0:
             # There are buttons available to interact with
             _neuro_cancel_delayed_functions()
             neuro_unregister_action("progress_dialogue")
             neuro_unregister_action("skip")
-            if neuroconfig.allow_interaction:
+            if neuro_get_config("allow_interaction"):
                 _neuro_delayed_function(
-                    neuroconfig.min_interaction_time,
+                    neuro_get_config("min_interaction_time"),
                     _neuro_register_click_button_action_and_deadline
                 )
         elif "type" in kwargs and kwargs["type"] == "pause":
@@ -806,50 +950,69 @@ init python:
             _neuro_cancel_delayed_functions()
             neuro_unregister_action("progress_dialogue")
             neuro_unregister_action("skip")
-            if neuroconfig.allow_interaction:
+            if neuro_get_config("allow_interaction"):
                 _neuro_delayed_function(
-                    neuroconfig.min_interaction_time,
+                    neuro_get_config("min_interaction_time"),
                     _neuro_register_continue_action_and_deadline
                 )
-        rv = _neuro_original_ui_interact(*args, **kwargs)
+        rv = old_func(*args, **kwargs)
         if not renpy.config.skipping:
             neuro_unregister_action("click_button")
         return rv
-    renpy.ui.interact = _neuro_custom_ui_interact
-    del _neuro_custom_ui_interact
+    _neuro_override_func(renpy.ui, "interact", _neuro_custom_ui_interact)
 
 
-screen _neuro_delayed_function_screen(delay, function, args, kwargs):
+screen _neuro_delayed_function_screen_0(delay, function, args, kwargs):
     zorder 1000
     modal False
-    timer delay action [Hide("_neuro_delayed_function_screen"), Function(function, *args, **kwargs)]
+    timer delay action [Function(_neuro_cancel_delayed_function, 0), Function(function, *args, **kwargs)]
 
-screen _neuro_delayed_function_screen_2(delay, function, args, kwargs):
+screen _neuro_delayed_function_screen_1(delay, function, args, kwargs):
     zorder 1001
     modal False
-    timer delay action [Hide("_neuro_delayed_function_screen_2"), Function(function, *args, **kwargs)]
+    timer delay action [Function(_neuro_cancel_delayed_function, 1), Function(function, *args, **kwargs)]
 
-screen _neuro_delayed_function_screen_3(delay, function, args, kwargs):
+screen _neuro_delayed_function_screen_2(delay, function, args, kwargs):
     zorder 1002
     modal False
-    timer delay action [Hide("_neuro_delayed_function_screen_3"), Function(function, *args, **kwargs)]
+    timer delay action [Function(_neuro_cancel_delayed_function, 2), Function(function, *args, **kwargs)]
 
-screen _neuro_delayed_function_screen_4(delay, function, args, kwargs):
+screen _neuro_delayed_function_screen_3(delay, function, args, kwargs):
     zorder 1003
     modal False
-    timer delay action [Hide("_neuro_delayed_function_screen_4"), Function(function, *args, **kwargs)]
+    timer delay action [Function(_neuro_cancel_delayed_function, 3), Function(function, *args, **kwargs)]
 
-screen _neuro_delayed_function_screen_5(delay, function, args, kwargs):
+screen _neuro_delayed_function_screen_4(delay, function, args, kwargs):
     zorder 1004
     modal False
-    timer delay action [Hide("_neuro_delayed_function_screen_5"), Function(function, *args, **kwargs)]
+    timer delay action [Function(_neuro_cancel_delayed_function, 4), Function(function, *args, **kwargs)]
+
+screen _neuro_delayed_function_screen_5(delay, function, args, kwargs):
+    zorder 1005
+    modal False
+    timer delay action [Function(_neuro_cancel_delayed_function, 5), Function(function, *args, **kwargs)]
+
+screen _neuro_delayed_function_screen_6(delay, function, args, kwargs):
+    zorder 1006
+    modal False
+    timer delay action [Function(_neuro_cancel_delayed_function, 6), Function(function, *args, **kwargs)]
+
+screen _neuro_delayed_function_screen_7(delay, function, args, kwargs):
+    zorder 1007
+    modal False
+    timer delay action [Function(_neuro_cancel_delayed_function, 7), Function(function, *args, **kwargs)]
+
+screen _neuro_delayed_function_screen_8(delay, function, args, kwargs):
+    zorder 1008
+    modal False
+    timer delay action [Function(_neuro_cancel_delayed_function, 8), Function(function, *args, **kwargs)]
+
+screen _neuro_delayed_function_screen_9(delay, function, args, kwargs):
+    zorder 1009
+    modal False
+    timer delay action [Function(_neuro_cancel_delayed_function, 9), Function(function, *args, **kwargs)]
 
 screen _neuro_return_screen(value):
-    zorder 1000
+    zorder 2000
     modal False
     timer 0.1 action [Hide("_neuro_return_screen"), Return(value)]
-
-screen _neuro_click_button_screen(button_txt):
-    zorder 1000
-    modal False
-    timer 0.1 action [Hide("_neuro_click_button_screen"), Function(_neuro_click_button, button_txt)]

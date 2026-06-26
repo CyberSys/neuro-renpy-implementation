@@ -39,9 +39,15 @@ min_progression_time = 2.0
 # If progression_mode is set to "action", this is the maximum time the Neuro API has to respond before the action is forced
 # If progression_mode is set to "auto", this is the time before the next dialogue line is automatically shown
 max_progression_time = 5.0
+# If set to True, the implementation will try to wait for a voiceover to finish before allowing progression
+# Works both with "action" and "auto" progression modes
+# Might not always work, might detect non-voiceover audio as voiceover or fail to detect voiceover
+wait_for_voiceover = True
 # Whether the Neuro API should be able to interact whenever there is a choice to be made, such as in the choices menu or custom screens
 allow_interaction = True
 # At a minimum, how long should it take before the Neuro API can interact on screens such as the choices menu (in seconds)
 min_interaction_time = 5.0
 # At a maximum, how long should it take before an interaction action is forced (in seconds)
 max_interaction_time = 60.0
+# If the Neuro API is allowed to skip seen dialogue
+allow_skipping = True
