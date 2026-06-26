@@ -87,7 +87,7 @@ init -1 python:
     def _neuro_delayed_function(delay, function, *args, **kwargs):
         # Delay cannot be less than or equal to zero
         delay = 0.1 if delay <= 0.0 else delay
-        # We use five different screens to allow multiple delayed functions to be scheduled at the same time
+        # We use ten different screens to allow multiple delayed functions to be scheduled at the same time
         global _neuro_delayed_function_screens_active
         if "_neuro_delayed_function_screens_active" not in globals():
             _neuro_delayed_function_screens_active = [False, False, False, False, False, False, False, False, False, False]
@@ -283,7 +283,7 @@ init -1 python:
             neuro_give_context("Loading your last saved state. You will start off where you left off.", silent=True)
             renpy.load(renpy.newest_slot())
             neuro_give_context("Loading your last saved state failed. Starting a new game instead.", silent=True)
-            renpy.log("[NEURO] Failed to load the last saved state: {}".format(str(e)))
+            renpy.log("[NEURO] Failed to load the last saved state")
         # Start a new game if no save was found or force_new_game is True or save_game in neuroconfig is False
         renpy.jump_out_of_context("start")
 
