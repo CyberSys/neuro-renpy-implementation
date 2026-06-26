@@ -11,9 +11,9 @@ This mod can also be used by developers who want to include Neuro Game API suppo
 ## Installation and Setup
 1. Download the mod via GitHub. Go to the [latest release](https://github.com/caheuer/neuro-renpy-implementation/releases/latest) and download the specific integration for your game or the general release.
 2. Extract the files using your favorite ZIP file extractor
-3. Copy the **contents** of the zip into the `game` folder of the Ren'Py game.
+3. Copy the **contents** of the ZIP file into the `game` folder of the Ren'Py game.
 Each Ren'Py game installation will have a `game` folder.
-4. Edit `neuroconfig.py` to configurate the mod to your liking.
+4. Edit `neuroconfig.py` to configure the mod to your liking.
 You can open the file with any text file editor, such as Notepad on Windows.
 For certain use-cases (e.g. context only), check out the templates in the `config-templates` folder.
 To use a template, please copy-paste the **contents** of the template file whilst keeping the name of the file in the `game` folder `neuroconfig.py`.
@@ -64,13 +64,13 @@ Do not hesitate to test the mod on other games and note your results there as we
 ## For Developers
 If you are a Ren'Py game developer, you can use this mod to easily add support for the Neuro Game API to your game.
 
-To add this mod to your game, [download the project from GitHub](https://github.com/caheuer/neuro-renpy-implementation/archive/refs/heads/main.zip) and simply add the contents of the `neuro-implentation` folder into the `game` folder of your project.
+To add this mod to your game, [download the project from GitHub](https://github.com/caheuer/neuro-renpy-implementation/archive/refs/heads/main.zip) and simply add the contents of the `neuro-implementation` folder into the `game` folder of your project.
 You can find the `game` folder under `Open Directory > game` in your Ren'Py launcher.
 Then launch the game like you usually do.
 
 When you build your project, the mod should be automatically included.
 Please be aware that the mod currently only works for desktop builds due to limitations with the websocket package used by this mod.
-Web, Android and iOS builds are not be able to connect via websocket.
+Web, Android and iOS builds cannot connect via websocket.
 
 The mod will automatically provide all dialogue as context and create actions for choices and inputs.
 If you would like to give extra context or provide extra functions, you can use the functions described in [FUNCTIONS.md](FUNCTIONS.md).

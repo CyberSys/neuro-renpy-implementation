@@ -126,6 +126,8 @@ value (any): The value to be set\
 override_user_config (bool): If the value should be overwritten even if it has been set by the user in `neuroconfig.py`.
 If set to `False`, the user's setting will take precedence.
 
+Example:
+
 python:
   # Setting the default value for "some_key" if it has not been set by user in neuroconfig.py
   neuro_set_config("some_key", "some_value", False)

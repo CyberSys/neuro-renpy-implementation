@@ -10,14 +10,14 @@ A [game-specific implementation](https://github.com/caheuer/neuro-renpy-implemen
 
 ### Context
 All context on the dialogue and poems are given.
-Some non-crucial audiovisual context to the game is missing, such as special fonts, music changing or visual changes.
+Some non-crucial audiovisual context is missing, such as special fonts, music changes, or visual changes.
 
 ### Interaction
 Neuro can play this game start-to-end without any intervention.
 
 ### Recommendations
 - Use only the game-specific implementation and its accompanying `neuroconfig.py`
-- If the game has been previously opened, delete the folder `C:\Users\[username]\AppData\Roaming\RenPy\DDLC-1454445547`
+- If the game has been previously opened, delete the folder `%APPDATA%\Roaming\RenPy\DDLC-1454445547`
 
 
 ## MILK INSIDE A BAG OF MILK INSIDE A BAG OF MILK
